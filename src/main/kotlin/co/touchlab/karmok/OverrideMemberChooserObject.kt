@@ -7,6 +7,7 @@ import com.intellij.codeInsight.generation.MemberChooserObjectBase
 import com.intellij.openapi.project.Project
 import com.intellij.psi.PsiDocCommentOwner
 import com.intellij.psi.PsiElement
+import org.jetbrains.kotlin.backend.common.descriptors.allParameters
 import org.jetbrains.kotlin.builtins.KotlinBuiltIns
 import org.jetbrains.kotlin.descriptors.*
 import org.jetbrains.kotlin.idea.caches.resolve.resolveToDescriptorIfAny
@@ -110,6 +111,13 @@ fun OverrideMemberChooserObject.generateMember(
     targetClass: KtClassOrObject,
     copyDoc: Boolean
 ) = generateMember(targetClass, copyDoc, targetClass.project, mode = MemberGenerateMode.OVERRIDE)
+
+fun OverrideMemberChooserObject.generateMocker(
+    targetClass: KtClassOrObject
+) : KtDeclaration {
+    val factory = KtPsiFactory(targetClass.project)
+    return factory.createProperty("internal val ${makeMockerName(descriptor)} = MockRecorder<${descriptor.returnType.toString()}>()")
+}
 
 fun OverrideMemberChooserObject.generateMember(
     targetClass: KtClassOrObject?,
@@ -272,15 +280,15 @@ private fun generateProperty(
 
     val returnType = descriptor.returnType
     val returnsNotUnit = returnType != null && !KotlinBuiltIns.isUnit(returnType)
-
     val body =
         if (bodyType != NO_BODY) {
+            val mockRecorderName = makeMockerName(descriptor)
             buildString {
                 append("\nget()")
                 append(" = ")
-                append(generateUnsupportedOrSuperCall(project, descriptor, bodyType, !returnsNotUnit))
+                append("$mockRecorderName.invoke()")
                 if (descriptor.isVar) {
-                    append("\nset(value) {}")
+                    append("\nset(value) {$mockRecorderName.invokeUnit(listOf(value))}")
                 }
             }
         } else ""
@@ -311,8 +319,10 @@ private fun generateFunction(
     val returnsNotUnit = returnType != null && !KotlinBuiltIns.isUnit(returnType)
 
     val body = if (bodyType != NO_BODY) {
-        val delegation = generateUnsupportedOrSuperCall(project, descriptor, bodyType, !returnsNotUnit)
-        val returnPrefix = if (returnsNotUnit && bodyType.requiresReturn) "return " else ""
+        val paramsString = descriptor.valueParameters.joinToString {it.name.asString()}
+        val invokeName = if(returnsNotUnit){"invoke"}else{"invokeUnit"}
+        val delegation = "${makeMockerName(descriptor)}.${invokeName}(listOf(${paramsString}))"
+        val returnPrefix = if (returnsNotUnit) "return " else ""
         "{$returnPrefix$delegation\n}"
     } else ""
 
@@ -328,6 +338,11 @@ private fun generateFunction(
         }
         else -> factory.createFunction(functionText)
     }
+}
+
+private fun makeMockerName(descriptor: CallableMemberDescriptor): String {
+    val descriptorTypeName = if(descriptor is FunctionDescriptor){"_fun"}else{"_prop"}
+    return "${descriptor.name}$descriptorTypeName"
 }
 
 fun generateUnsupportedOrSuperCall(

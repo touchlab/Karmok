@@ -14,6 +14,7 @@ import org.jetbrains.kotlin.descriptors.ClassDescriptor
 import org.jetbrains.kotlin.idea.caches.resolve.resolveToDescriptorIfAny
 import org.jetbrains.kotlin.idea.core.insertMembersAfter
 import org.jetbrains.kotlin.psi.KtClassOrObject
+import org.jetbrains.kotlin.psi.KtDeclaration
 import org.jetbrains.kotlin.psi.KtFile
 import org.jetbrains.kotlin.psi.psiUtil.getNonStrictParentOfType
 
@@ -90,7 +91,12 @@ abstract class OverrideImplementMembersHandler : LanguageCodeInsightActionHandle
             selectedElements: Collection<OverrideMemberChooserObject>,
             copyDoc: Boolean
         ) {
-            insertMembersAfter(editor, classOrObject, selectedElements.map { it.generateMember(classOrObject, copyDoc) })
+            val newMembers = mutableListOf<KtDeclaration>()
+            selectedElements.forEach {
+                newMembers.add(it.generateMember(classOrObject, copyDoc))
+                newMembers.add(it.generateMocker(classOrObject))
+            }
+            insertMembersAfter(editor, classOrObject, newMembers)
         }
     }
 }
