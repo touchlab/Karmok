@@ -40,13 +40,9 @@
             <className>co.touchlab.karmok.MockMembersHandler</className>
             <category>kotlin</category>
         </intentionAction>
-        <codeInsight.implementMethod language="kotlin" implementationClass="co.touchlab.karmok.MockMembersHandler"/>
     </extensions>
 
-    <actions>
-        <group id="MyPlugin.SampleMenu" text="Greeting" description="Greeting menu">
-            <add-to-group group-id="MainMenu" anchor="last"/>
-            <action id="Myplugin.Textboxes" class="co.touchlab.karmok.HelloAction" text="Hello" description="Says hello"/>
-        </group>
-    </actions>
+    <!--<actions>
+
+    </actions>-->
 </idea-plugin>

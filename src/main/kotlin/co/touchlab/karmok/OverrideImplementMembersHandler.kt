@@ -93,8 +93,8 @@ abstract class OverrideImplementMembersHandler : LanguageCodeInsightActionHandle
         ) {
             val newMembers = mutableListOf<KtDeclaration>()
             selectedElements.forEach {
-                newMembers.add(it.generateMember(classOrObject, copyDoc))
                 newMembers.add(it.generateMocker(classOrObject))
+                newMembers.add(it.generateMember(classOrObject, copyDoc))
             }
             insertMembersAfter(editor, classOrObject, newMembers)
         }

@@ -16,17 +16,11 @@
 
 package co.touchlab.karmok
 
-import org.jetbrains.kotlin.psi.KtClassOrObject
-
 class MockMembersHandler : ImplementMembersHandler(){
-    init {
-        println()
-//        throw IllegalStateException("Nah")
-    }
-    override fun getChooserTitle() = "Magic Mock"
+    override fun getChooserTitle() = "Implement Mock Members"
 
-    override fun getNoMembersFoundHint() = "No members to implement have been found"
+    override fun getNoMembersFoundHint() = "No members to mock have been found"
 
-    override fun getText() = "Magic Mock"
-    override fun getFamilyName() = "Magic Mock"
+    override fun getText() = "Implement Mock Members"
+    override fun getFamilyName() = "Implement Mock Members"
 }
