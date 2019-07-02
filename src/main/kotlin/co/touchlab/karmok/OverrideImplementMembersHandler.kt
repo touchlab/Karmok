@@ -9,13 +9,13 @@ import com.intellij.openapi.editor.Editor
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.DialogWrapper
 import com.intellij.psi.PsiDocumentManager
+import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiFile
 import org.jetbrains.kotlin.descriptors.ClassDescriptor
+import org.jetbrains.kotlin.descriptors.FunctionDescriptor
 import org.jetbrains.kotlin.idea.caches.resolve.resolveToDescriptorIfAny
 import org.jetbrains.kotlin.idea.core.insertMembersAfter
-import org.jetbrains.kotlin.psi.KtClassOrObject
-import org.jetbrains.kotlin.psi.KtDeclaration
-import org.jetbrains.kotlin.psi.KtFile
+import org.jetbrains.kotlin.psi.*
 import org.jetbrains.kotlin.psi.psiUtil.getNonStrictParentOfType
 
 abstract class OverrideImplementMembersHandler : LanguageCodeInsightActionHandler {
@@ -49,6 +49,8 @@ abstract class OverrideImplementMembersHandler : LanguageCodeInsightActionHandle
     protected abstract fun getNoMembersFoundHint(): String
 
     fun invoke(project: Project, editor: Editor, file: PsiFile, implementAll: Boolean) {
+
+
         val elementAtCaret = file.findElementAt(editor.caretModel.offset)
         val classOrObject = elementAtCaret?.getNonStrictParentOfType<KtClassOrObject>() ?: return
 
@@ -75,7 +77,28 @@ abstract class OverrideImplementMembersHandler : LanguageCodeInsightActionHandle
 
         PsiDocumentManager.getInstance(project).commitAllDocuments()
 
-        generateMembers(editor, classOrObject, selectedElements, copyDoc)
+        val classBody = classOrObject.children.firstOrNull { it is KtClassBody }
+        val factory = KtPsiFactory(classOrObject.project)
+
+
+        var mockProperty: KtProperty? = findElement(classOrObject) { it is KtProperty && it.name.equals("mock") }
+        if(mockProperty == null) {
+            mockProperty = factory.createProperty("internal val mock = InnerMock()")
+            insertMembersAfter(editor, classOrObject, listOf(mockProperty), classBody?.firstChild)
+            mockProperty = findElement(classOrObject) { it is KtProperty && it.name.equals("mock") }!!
+        }
+
+        val cl = findOrCreateMockInnerClass(classOrObject)
+
+        val generatedElem = insertMembersAfter(editor, classOrObject, listOf(cl)).get(0)
+
+        generateMembers(editor, classOrObject, selectedElements, copyDoc, mockProperty)
+        generateMockers(editor, classOrObject, selectedElements, generatedElem)
+    }
+
+    private fun findOrCreateMockInnerClass(classOrObject: KtClassOrObject): KtClass {
+        val factory = KtPsiFactory(classOrObject.project)
+        return factory.createClass("inner class InnerMock : MockManager() {}")
     }
 
     override fun invoke(project: Project, editor: Editor, file: PsiFile) {
@@ -89,14 +112,33 @@ abstract class OverrideImplementMembersHandler : LanguageCodeInsightActionHandle
             editor: Editor?,
             classOrObject: KtClassOrObject,
             selectedElements: Collection<OverrideMemberChooserObject>,
-            copyDoc: Boolean
+            copyDoc: Boolean,
+            mockProp: KtProperty
         ) {
-            val newMembers = mutableListOf<KtDeclaration>()
-            selectedElements.forEach {
-                newMembers.add(it.generateMocker(classOrObject))
-                newMembers.add(it.generateMember(classOrObject, copyDoc))
+            insertMembersAfter(editor, classOrObject, selectedElements.sortedBy { it.descriptor is FunctionDescriptor }.map { it.generateMember(classOrObject, copyDoc) }, mockProp)
+        }
+
+        fun generateMockers(
+            editor: Editor?,
+            classOrObject: KtClassOrObject,
+            selectedElements: Collection<OverrideMemberChooserObject>,
+            mockClass: KtClass
+        ) {
+            val classBody = findElement<KtClassBody>(mockClass) { it is KtClassBody }!!
+            insertMembersAfter(editor, mockClass, selectedElements.map { it.generateMocker(classOrObject) }, classBody.firstChild)
+        }
+
+        fun <T:PsiElement> findElement(elem: PsiElement, block:(PsiElement)->Boolean): T? {
+
+            elem.children.forEach {
+                if(block(it))
+                    return it as T
+                val result = findElement<T>(it, block)
+                if(result != null)
+                    return result
             }
-            insertMembersAfter(editor, classOrObject, newMembers)
+
+            return null
         }
     }
 }

@@ -125,10 +125,10 @@ fun OverrideMemberChooserObject.generateMocker(
     }
     val targetTypestring = typeBuilder.toString()
     val propertyDefinition: String = when (descriptor) {
-        is FunctionDescriptor -> "internal val ${makeMockerName(descriptor)} = MockRecorder<$targetTypestring, ${descriptor.returnType.toString()}>(this)"
+        is FunctionDescriptor -> "internal val ${makeMockerName(descriptor)} = MockRecorder<$targetTypestring, ${descriptor.returnType.toString()}>()"
         is PropertyDescriptor -> {
             val propSetter = if((descriptor as PropertyDescriptor).isVar){"${descriptor.name} = it"}else{""}
-            "internal val ${makeMockerName(descriptor)} = MockProperty<$targetTypestring, ${descriptor.returnType.toString()}>(this, {${descriptor.name}}) {$propSetter}"
+            "internal val ${makeMockerName(descriptor)} = MockProperty<$targetTypestring, ${descriptor.returnType.toString()}>({${descriptor.name}}) {$propSetter}"
         }
         else -> error("Unknown member to override: $descriptor")
     }
@@ -300,7 +300,7 @@ private fun generateProperty(
         if (bodyType != NO_BODY) {
             val mockRecorderName = makeMockerName(descriptor)
             buildString {
-                append(" by $mockRecorderName")
+                append(" by mock.$mockRecorderName")
             }
         } else ""
     return KtPsiFactory(project).createProperty(renderer.render(newDescriptor) + body)
@@ -339,7 +339,7 @@ private fun generateFunction(
         }
         val invokeName = if(returnsNotUnit){"invoke"}else{"invokeUnit"}
         val accessMethod = "${descriptor.name.asString()}($paramsString)"//if(returnsNotUnit){"${descriptor.name.asString()}($paramsString)"}else{""}
-        val delegation = "${makeMockerName(descriptor)}.${invokeName}({$accessMethod}, listOf(${paramsString}))"
+        val delegation = "mock.${makeMockerName(descriptor)}.${invokeName}({$accessMethod}, listOf(${paramsString}))"
         val returnPrefix = if (returnsNotUnit) "return " else ""
         "{$returnPrefix$delegation\n}"
     } else ""
