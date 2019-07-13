@@ -98,7 +98,7 @@ abstract class OverrideImplementMembersHandler : LanguageCodeInsightActionHandle
 
     private fun findOrCreateMockInnerClass(classOrObject: KtClassOrObject): KtClass {
         val factory = KtPsiFactory(classOrObject.project)
-        return factory.createClass("inner class InnerMock : MockManager() {}")
+        return factory.createClass("inner class InnerMock(delegate:Any? = null, recordCalls:Boolean = true) : MockManager(delegate, recordCalls) {}")
     }
 
     override fun invoke(project: Project, editor: Editor, file: PsiFile) {

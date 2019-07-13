@@ -1,4 +1,6 @@
 rootProject.name = 'karmokintellij'
 
 include ':idea-plugin'
-include ':karmok-library'
+include 'karmok-library'
+
+enableFeaturePreview('GRADLE_METADATA')

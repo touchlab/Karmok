@@ -2,46 +2,45 @@ package co.touchlab.karmok
 
 import kotlin.reflect.KProperty
 
-abstract class MockManager {
-    internal var delegate:Any? = null
+abstract class MockManager(
+    internal var delegate:Any?,
+    internal var recordCalls:Boolean
+    ) {
+
+    private data class CannedResult<RT>(val r:RT, var times:Int)
 
     inner class MockRecorder<T, RT> () {
 
         val emptyList = emptyList<Any?>().freeze()
 
-        private var invokedCount = AtomicInt(0)
-        private var invokedParametersList = AtomicReference<List<Any?>>(emptyList)
-        private var stubbedError = AtomicReference<Throwable?>(null)
-        private var stubbedResult = AtomicReference<RT?>(null)
+        private var invokedCount = 0
+        private var invokedParametersList = mutableListOf<List<Any?>>()
+        private var stubbedError : Throwable? = null
+        private var stubbedResult = mutableListOf<CannedResult<RT>>()
 
         val called : Boolean
-            get() = invokedCount.value > 0
+            get() = invokedCount > 0
 
         val calledCount : Int
-            get() = invokedCount.value
+            get() = invokedCount
 
         fun throwOnCall(t:Throwable){
-            stubbedError.value = t.freeze()
+            stubbedError = t
         }
 
-        fun returnOnCall(rt:RT){
-            stubbedResult.value = rt.freeze()
+        fun returns(rt:RT, times: Int = 1):MockRecorder<T, RT>{
+            stubbedResult.add(CannedResult(rt, times))
+            return this
         }
 
         fun invokeCount(args:List<Any?>){
-            invokedCount.incrementAndGet()
+            invokedCount++
 
-            //Threads are tough
-            while (true){
-                val lastList = invokedParametersList.value
-                val newList = ArrayList(lastList)
-                newList.add(args)
-                if(invokedParametersList.compareAndSet(lastList, newList.freeze()))
-                    break
-            }
+            if(recordCalls)
+                invokedParametersList.add(ArrayList(args))
 
-            if(stubbedError.value != null)
-                throw stubbedError.value!!
+            if(stubbedError != null)
+                throw stubbedError!!
         }
 
         fun invokeUnit(dblock:T.()->Unit, args:List<Any?>){
@@ -53,8 +52,8 @@ abstract class MockManager {
 
         fun invoke(dblock:T.()->RT, args:List<Any?>):RT{
             invokeCount(args)
-            if(stubbedResult.value != null)
-                return stubbedResult.value!!
+            if(stubbedResult.isNotEmpty())
+                return stubbedResult!!
 
             if(delegate != null){
                 return (delegate as T).dblock()
@@ -69,40 +68,40 @@ abstract class MockManager {
     inner class MockProperty<T, RT>(private val dget:T.()->RT, private val dset:T.(RT)->Unit) {
         val emptyList = emptyList<RT>().freeze()
 
-        private var invokedCountGet = AtomicInt(0)
-        private var invokedCountSet = AtomicInt(0)
-        private var invokedParametersListSet = AtomicReference(emptyList)
-        private var stubbedError = AtomicReference<Throwable?>(null)
-        private val stubbedResult = AtomicReference<RT?>(null)
+        private var invokedCountGet = 0
+        private var invokedCountSet = 0
+        private var invokedParametersListSet = mutableListOf<RT>()
+        private var stubbedError : Throwable? = null
+        private var stubbedResult : RT? = null
 
         val called : Boolean
-            get() = invokedCountGet.value > 0 || invokedCountSet.value > 0
+            get() = invokedCountGet > 0 || invokedCountSet > 0
 
         val calledCountGet : Int
-            get() = invokedCountGet.value
+            get() = invokedCountGet
 
         val calledCountSet : Int
-            get() = invokedCountSet.value
+            get() = invokedCountSet
 
         fun throwOnCall(t:Throwable){
-            stubbedError.value = t.freeze()
+            stubbedError = t
         }
 
         fun returnOnCall(rt:RT){
-            stubbedResult.value = rt.freeze()
+            stubbedResult = rt
         }
 
         operator fun getValue(thisRef: Any?, property: KProperty<*>): RT {
             try {
-                if(stubbedResult.value != null)
-                    return stubbedResult.value!!
+                if(stubbedResult != null)
+                    return stubbedResult!!
 
                 if(delegate != null){
                     return (delegate as T).dget()
                 }
 
             } finally {
-                invokedCountGet.incrementAndGet()
+                invokedCountGet++
             }
 
             throw NullPointerException()
@@ -112,10 +111,13 @@ abstract class MockManager {
             if (delegate != null) {
                 (delegate as T).dset(value)
             } else {
-                stubbedResult.value = value.freeze()
+                stubbedResult = value
             }
 
-            invokedCountSet.incrementAndGet()
+            if(recordCalls)
+                invokedParametersListSet.add(value)
+
+            invokedCountSet++
         }
     }
 }
