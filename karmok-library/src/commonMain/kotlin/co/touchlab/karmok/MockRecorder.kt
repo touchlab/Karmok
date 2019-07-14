@@ -2,106 +2,148 @@ package co.touchlab.karmok
 
 import kotlin.reflect.KProperty
 
+sealed class Interaction
+data class MethodCall(val source: MockManager.MockRecorder<*, *>, val data: List<Any?>) : Interaction()
+data class ValGet(val source: MockManager.MockProperty<*, *>) : Interaction()
+data class ValSet<RT>(val source: MockManager.MockProperty<*, *>, val data: RT) : Interaction()
+
 abstract class MockManager(
-    internal var delegate:Any?,
-    internal var recordCalls:Boolean
-    ) {
+    internal var delegate: Any?,
+    internal var recordCalls: Boolean
+) {
 
-    private data class CannedResult<RT>(val r:RT, var times:Int)
+    private data class CannedResult<RT>(val r: RT, var times: Int)
 
-    inner class MockRecorder<T, RT> () {
+    private var verifyPosition = 0
+
+    private val globalInvokedParametersList = mutableListOf<Interaction>()
+
+    internal fun nextInteraction() = globalInvokedParametersList.get(verifyPosition++)
+
+    fun resetVerify() {
+        verifyPosition = 0
+    }
+
+    val done: Boolean
+        get() {
+            debugPrint()
+            return verifyPosition == globalInvokedParametersList.size
+        }
+
+    fun debugPrint(){
+        println("verifyPosition: $verifyPosition")
+        globalInvokedParametersList.forEach {
+            println("interaction: $it")
+        }
+    }
+
+    inner class MockRecorder<T, RT>() {
 
         val emptyList = emptyList<Any?>().freeze()
 
         private var invokedCount = 0
-        private var invokedParametersList = mutableListOf<List<Any?>>()
-        private var stubbedError : Throwable? = null
+        private val interactionList = mutableListOf<MethodCall>()
+        private var stubbedError: Throwable? = null
         private var stubbedResult = mutableListOf<CannedResult<RT>>()
 
-        val called : Boolean
+        fun calledWith(args: List<Any?>): Boolean = nextInteraction() == MethodCall(this, args)
+
+        val called: Boolean
             get() = invokedCount > 0
 
-        val calledCount : Int
+        val calledCount: Int
             get() = invokedCount
 
-        fun throwOnCall(t:Throwable){
+        fun throwOnCall(t: Throwable) {
             stubbedError = t
         }
 
-        fun returns(rt:RT, times: Int = 1):MockRecorder<T, RT>{
+        fun returns(rt: RT, times: Int = 1): MockRecorder<T, RT> {
             stubbedResult.add(CannedResult(rt, times))
             return this
         }
 
-        fun invokeCount(args:List<Any?>){
+        fun invokeCount(args: List<Any?>) {
             invokedCount++
 
-            if(recordCalls)
-                invokedParametersList.add(ArrayList(args))
+            if (recordCalls) {
+                val element = MethodCall(this, ArrayList(args))
+                interactionList.add(element)
+                globalInvokedParametersList.add(element)
+            }
 
-            if(stubbedError != null)
+            if (stubbedError != null)
                 throw stubbedError!!
         }
 
-        fun invokeUnit(dblock:T.()->Unit, args:List<Any?>){
+        fun invokeUnit(dblock: T.() -> Unit, args: List<Any?>) {
             invokeCount(args)
-            if(delegate != null){
+            if (delegate != null) {
                 (delegate as T).dblock()
             }
         }
 
-        fun invoke(dblock:T.()->RT, args:List<Any?>):RT{
-            invokeCount(args)
-            if(stubbedResult.isNotEmpty())
-                return stubbedResult!!
-
-            if(delegate != null){
-                return (delegate as T).dblock()
+        fun invoke(dblock: T.() -> RT, args: List<Any?>): RT {
+            val result = if (stubbedResult.isNotEmpty()) {
+                stubbedResult.removeAt(0).r
+            } else if (delegate != null) {
+                (delegate as T).dblock()
+            } else {
+                throw NullPointerException()
             }
 
-            throw NullPointerException()
+            invokeCount(args)
+            return result
         }
 
-        fun invoke(dblock:T.()->RT):RT = invoke(dblock, emptyList)
+        fun invoke(dblock: T.() -> RT): RT = invoke(dblock, emptyList)
     }
 
-    inner class MockProperty<T, RT>(private val dget:T.()->RT, private val dset:T.(RT)->Unit) {
+    inner class MockProperty<T, RT>(private val dget: T.() -> RT, private val dset: T.(RT) -> Unit) {
         val emptyList = emptyList<RT>().freeze()
 
         private var invokedCountGet = 0
         private var invokedCountSet = 0
-        private var invokedParametersListSet = mutableListOf<RT>()
-        private var stubbedError : Throwable? = null
-        private var stubbedResult : RT? = null
+        private val interactionList = mutableListOf<Interaction>()
+        private var stubbedError: Throwable? = null
+        private var stubbedResult: RT? = null
 
-        val called : Boolean
+        val getCalled: Boolean
+            get() = nextInteraction() == ValGet(this)
+
+        fun setCalled(rt: RT): Boolean = nextInteraction() == ValSet(this, rt)
+
+        val called: Boolean
             get() = invokedCountGet > 0 || invokedCountSet > 0
 
-        val calledCountGet : Int
+        val calledCountGet: Int
             get() = invokedCountGet
 
-        val calledCountSet : Int
+        val calledCountSet: Int
             get() = invokedCountSet
 
-        fun throwOnCall(t:Throwable){
+        fun throwOnCall(t: Throwable) {
             stubbedError = t
         }
 
-        fun returnOnCall(rt:RT){
+        fun returnOnCall(rt: RT) {
             stubbedResult = rt
         }
 
         operator fun getValue(thisRef: Any?, property: KProperty<*>): RT {
             try {
-                if(stubbedResult != null)
+                if (stubbedResult != null)
                     return stubbedResult!!
 
-                if(delegate != null){
+                if (delegate != null) {
                     return (delegate as T).dget()
                 }
 
             } finally {
                 invokedCountGet++
+                val interaction = ValGet(this)
+                interactionList.add(interaction)
+                globalInvokedParametersList.add(interaction)
             }
 
             throw NullPointerException()
@@ -114,8 +156,11 @@ abstract class MockManager(
                 stubbedResult = value
             }
 
-            if(recordCalls)
-                invokedParametersListSet.add(value)
+            if (recordCalls) {
+                val interaction = ValSet(this, value)
+                interactionList.add(interaction)
+                globalInvokedParametersList.add(interaction)
+            }
 
             invokedCountSet++
         }

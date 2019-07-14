@@ -88,17 +88,28 @@ abstract class OverrideImplementMembersHandler : LanguageCodeInsightActionHandle
             mockProperty = findElement(classOrObject) { it is KtProperty && it.name.equals("mock") }!!
         }
 
-        val cl = findOrCreateMockInnerClass(classOrObject)
+        val mockClass = findOrCreateMockInnerClass(classOrObject, editor)
 
-        val generatedElem = insertMembersAfter(editor, classOrObject, listOf(cl)).get(0)
+        val nameMap = MockNameMap()
 
-        generateMembers(editor, classOrObject, selectedElements, copyDoc, mockProperty)
-        generateMockers(editor, classOrObject, selectedElements, generatedElem)
+        generateMembers(editor, classOrObject, selectedElements, copyDoc, mockProperty, nameMap)
+        generateMockers(editor, classOrObject, selectedElements, mockClass, nameMap)
     }
 
-    private fun findOrCreateMockInnerClass(classOrObject: KtClassOrObject): KtClass {
+    private fun findOrCreateMockInnerClass(
+        classOrObject: KtClassOrObject,
+        editor: Editor
+    ): KtClass {
+        val innerMockClass:KtClass? = findElement(classOrObject) {
+            it is KtClass && it.name.equals("InnerMock")
+        }
+
+        if(innerMockClass != null)
+            return innerMockClass
         val factory = KtPsiFactory(classOrObject.project)
-        return factory.createClass("inner class InnerMock(delegate:Any? = null, recordCalls:Boolean = true) : MockManager(delegate, recordCalls) {}")
+        val cl = factory.createClass("inner class InnerMock(delegate:Any? = null, recordCalls:Boolean = true) : MockManager(delegate, recordCalls) {}")
+
+        return insertMembersAfter(editor, classOrObject, listOf(cl)).get(0)
     }
 
     override fun invoke(project: Project, editor: Editor, file: PsiFile) {
@@ -113,19 +124,21 @@ abstract class OverrideImplementMembersHandler : LanguageCodeInsightActionHandle
             classOrObject: KtClassOrObject,
             selectedElements: Collection<OverrideMemberChooserObject>,
             copyDoc: Boolean,
-            mockProp: KtProperty
+            mockProp: KtProperty,
+            nameMap: MockNameMap
         ) {
-            insertMembersAfter(editor, classOrObject, selectedElements.sortedBy { it.descriptor is FunctionDescriptor }.map { it.generateMember(classOrObject, copyDoc) }, mockProp)
+            insertMembersAfter(editor, classOrObject, selectedElements.sortedBy { it.descriptor is FunctionDescriptor }.map { it.generateMember(classOrObject, copyDoc, nameMap) }, mockProp)
         }
 
         fun generateMockers(
             editor: Editor?,
             classOrObject: KtClassOrObject,
             selectedElements: Collection<OverrideMemberChooserObject>,
-            mockClass: KtClass
+            mockClass: KtClass,
+            nameMap: MockNameMap
         ) {
             val classBody = findElement<KtClassBody>(mockClass) { it is KtClassBody }!!
-            insertMembersAfter(editor, mockClass, selectedElements.map { it.generateMocker(classOrObject) }, classBody.firstChild)
+            insertMembersAfter(editor, mockClass, selectedElements.map { it.generateMocker(classOrObject, nameMap) }, classBody.firstChild)
         }
 
         fun <T:PsiElement> findElement(elem: PsiElement, block:(PsiElement)->Boolean): T? {

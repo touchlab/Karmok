@@ -7,7 +7,6 @@ import com.intellij.codeInsight.generation.MemberChooserObjectBase
 import com.intellij.openapi.project.Project
 import com.intellij.psi.PsiDocCommentOwner
 import com.intellij.psi.PsiElement
-import org.jetbrains.kotlin.backend.common.descriptors.allParameters
 import org.jetbrains.kotlin.builtins.KotlinBuiltIns
 import org.jetbrains.kotlin.descriptors.*
 import org.jetbrains.kotlin.idea.caches.resolve.resolveToDescriptorIfAny
@@ -20,7 +19,6 @@ import org.jetbrains.kotlin.idea.kdoc.KDocElementFactory
 import org.jetbrains.kotlin.idea.util.IdeDescriptorRenderers
 import org.jetbrains.kotlin.idea.util.approximateFlexibleTypes
 import org.jetbrains.kotlin.lexer.KtTokens
-import org.jetbrains.kotlin.nj2k.postProcessing.type
 import org.jetbrains.kotlin.psi.*
 import org.jetbrains.kotlin.psi.findDocComment.findDocComment
 import org.jetbrains.kotlin.psi.psiUtil.hasActualModifier
@@ -111,11 +109,13 @@ enum class MemberGenerateMode {
 
 fun OverrideMemberChooserObject.generateMember(
     targetClass: KtClassOrObject,
-    copyDoc: Boolean
-) = generateMember(targetClass, copyDoc, targetClass.project, mode = MemberGenerateMode.OVERRIDE)
+    copyDoc: Boolean,
+    nameMap: MockNameMap
+) = generateMember(targetClass, copyDoc, targetClass.project, mode = MemberGenerateMode.OVERRIDE, nameMap = nameMap)
 
 fun OverrideMemberChooserObject.generateMocker(
-    targetClass: KtClassOrObject
+    targetClass: KtClassOrObject,
+    nameMap: MockNameMap
 ) : KtDeclaration {
     val factory = KtPsiFactory(targetClass.project)
     val typeBuilder = StringBuilder(targetClass.fqName?.asString())
@@ -124,11 +124,12 @@ fun OverrideMemberChooserObject.generateMocker(
         typeBuilder.append("<${typeParameters.joinToString { it.name!! }}>")
     }
     val targetTypestring = typeBuilder.toString()
+
     val propertyDefinition: String = when (descriptor) {
-        is FunctionDescriptor -> "internal val ${makeMockerName(descriptor)} = MockRecorder<$targetTypestring, ${descriptor.returnType.toString()}>()"
+        is FunctionDescriptor -> "internal val ${nameMap.getName(this)} = MockRecorder<$targetTypestring, ${descriptor.returnType.toString()}>()"
         is PropertyDescriptor -> {
             val propSetter = if((descriptor as PropertyDescriptor).isVar){"${descriptor.name} = it"}else{""}
-            "internal val ${makeMockerName(descriptor)} = MockProperty<$targetTypestring, ${descriptor.returnType.toString()}>({${descriptor.name}}) {$propSetter}"
+            "internal val ${nameMap.getName(this)} = MockProperty<$targetTypestring, ${descriptor.returnType.toString()}>({${descriptor.name}}) {$propSetter}"
         }
         else -> error("Unknown member to override: $descriptor")
     }
@@ -139,7 +140,8 @@ fun OverrideMemberChooserObject.generateMember(
     targetClass: KtClassOrObject?,
     copyDoc: Boolean,
     project: Project,
-    mode: MemberGenerateMode
+    mode: MemberGenerateMode,
+    nameMap: MockNameMap
 ): KtCallableDeclaration {
     val descriptor = immediateSuper
 
@@ -167,9 +169,11 @@ fun OverrideMemberChooserObject.generateMember(
         return generateConstructorParameter(project, descriptor, renderer, mode == MemberGenerateMode.OVERRIDE)
     }
 
+    val mockName = nameMap.getName(this)
+
     val newMember: KtCallableDeclaration = when (descriptor) {
-        is FunctionDescriptor -> generateFunction(project, descriptor, renderer, bodyType, mode == MemberGenerateMode.OVERRIDE)
-        is PropertyDescriptor -> generateProperty(project, descriptor, renderer, bodyType, mode == MemberGenerateMode.OVERRIDE)
+        is FunctionDescriptor -> generateFunction(project, descriptor, renderer, bodyType, mockName, mode == MemberGenerateMode.OVERRIDE)
+        is PropertyDescriptor -> generateProperty(project, descriptor, renderer, bodyType, mockName, mode == MemberGenerateMode.OVERRIDE)
         else -> error("Unknown member to override: $descriptor")
     }
 
@@ -290,17 +294,14 @@ private fun generateProperty(
     descriptor: PropertyDescriptor,
     renderer: DescriptorRenderer,
     bodyType: OverrideMemberChooserObject.BodyType,
+    name: String,
     forceOverride: Boolean
 ): KtProperty {
     val newDescriptor = descriptor.wrap(forceOverride)
-
-    val returnType = descriptor.returnType
-    val returnsNotUnit = returnType != null && !KotlinBuiltIns.isUnit(returnType)
     val body =
         if (bodyType != NO_BODY) {
-            val mockRecorderName = makeMockerName(descriptor)
             buildString {
-                append(" by mock.$mockRecorderName")
+                append(" by mock.$name")
             }
         } else ""
     return KtPsiFactory(project).createProperty(renderer.render(newDescriptor) + body)
@@ -322,6 +323,7 @@ private fun generateFunction(
     descriptor: FunctionDescriptor,
     renderer: DescriptorRenderer,
     bodyType: OverrideMemberChooserObject.BodyType,
+    name: String,
     forceOverride: Boolean
 ): KtFunction {
     val newDescriptor = descriptor.wrap(forceOverride)
@@ -339,7 +341,7 @@ private fun generateFunction(
         }
         val invokeName = if(returnsNotUnit){"invoke"}else{"invokeUnit"}
         val accessMethod = "${descriptor.name.asString()}($paramsString)"//if(returnsNotUnit){"${descriptor.name.asString()}($paramsString)"}else{""}
-        val delegation = "mock.${makeMockerName(descriptor)}.${invokeName}({$accessMethod}, listOf(${paramsString}))"
+        val delegation = "mock.${name}.${invokeName}({$accessMethod}, listOf(${paramsString}))"
         val returnPrefix = if (returnsNotUnit) "return " else ""
         "{$returnPrefix$delegation\n}"
     } else ""
@@ -358,10 +360,7 @@ private fun generateFunction(
     }
 }
 
-private fun makeMockerName(descriptor: CallableMemberDescriptor): String {
-    val descriptorTypeName = if(descriptor is FunctionDescriptor){"_fun"}else{"_prop"}
-    return "${descriptor.name}$descriptorTypeName"
-}
+
 
 fun generateUnsupportedOrSuperCall(
     project: Project,
