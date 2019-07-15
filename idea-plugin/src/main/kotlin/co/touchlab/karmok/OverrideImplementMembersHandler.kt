@@ -90,7 +90,8 @@ abstract class OverrideImplementMembersHandler : LanguageCodeInsightActionHandle
 
         val mockClass = findOrCreateMockInnerClass(classOrObject, editor)
 
-        val nameMap = MockNameMap()
+        val nameMap = MockNameMap(mockClass
+            , selectedElements)
 
         generateMembers(editor, classOrObject, selectedElements, copyDoc, mockProperty, nameMap)
         generateMockers(editor, classOrObject, selectedElements, mockClass, nameMap)
@@ -141,17 +142,19 @@ abstract class OverrideImplementMembersHandler : LanguageCodeInsightActionHandle
             insertMembersAfter(editor, mockClass, selectedElements.map { it.generateMocker(classOrObject, nameMap) }, classBody.firstChild)
         }
 
-        fun <T:PsiElement> findElement(elem: PsiElement, block:(PsiElement)->Boolean): T? {
 
-            elem.children.forEach {
-                if(block(it))
-                    return it as T
-                val result = findElement<T>(it, block)
-                if(result != null)
-                    return result
-            }
-
-            return null
-        }
     }
+}
+
+fun <T:PsiElement> findElement(elem: PsiElement, block:(PsiElement)->Boolean): T? {
+
+    elem.children.forEach {
+        if(block(it))
+            return it as T
+        val result = findElement<T>(it, block)
+        if(result != null)
+            return result
+    }
+
+    return null
 }
