@@ -3,22 +3,50 @@ package co.touchlab.karmok
 import kotlin.reflect.KProperty
 
 sealed class Interaction
-data class MethodCall(val source: MockManager.MockRecorder<*, *>, val data: List<Any?>) : Interaction()
-data class ValGet(val source: MockManager.MockProperty<*, *>) : Interaction()
-data class ValSet<RT>(val source: MockManager.MockProperty<*, *>, val data: RT) : Interaction()
+data class MethodCall(val source: MockManager.MockFieldRecorder<*, *>, val data: List<Any?>) : Interaction()
+data class ValGet(val source: MockManager.MockPropertyRecorder<*, *>) : Interaction()
+data class ValSet<RT>(val source: MockManager.MockPropertyRecorder<*, *>, val data: RT) : Interaction()
+
+sealed class Matcher {
+    abstract fun match(arg: Any?): Boolean
+}
+
+data class Exact<T>(val v: T) : Matcher() {
+    override fun match(arg: Any?) = v == arg
+}
+
+object AnyMatch : Matcher() {
+    override fun match(arg: Any?) = true
+}
+
+data class FuncMatch(val block: (Any?) -> Boolean) : Matcher() {
+    override fun match(arg: Any?): Boolean = block(arg)
+}
+
+fun any() = AnyMatch
+fun <T> exact(v: T) = Exact(v)
+fun func(block: (Any?) -> Boolean) = FuncMatch(block)
 
 abstract class MockManager(
-    internal var delegate: Any?,
-    internal var recordCalls: Boolean
+    internal var delegate: Any?
 ) {
 
-    private data class CannedResult<RT>(val r: RT, var times: Int)
+    companion object {
+        val emptyList = emptyList<Any?>().freeze()
+    }
+
+    private data class CannedResult<RT>(val r: RT, var times: Int, val matchers: List<Matcher>)
 
     private var verifyPosition = 0
 
     private val globalInvokedParametersList = mutableListOf<Interaction>()
 
-    internal fun nextInteraction() = globalInvokedParametersList.get(verifyPosition++)
+    internal fun nextInteraction(): Interaction {
+        if(done)
+            throw IllegalStateException("Interactions done")
+
+        return globalInvokedParametersList.get(verifyPosition++)
+    }
 
     fun resetVerify() {
         verifyPosition = 0
@@ -30,47 +58,45 @@ abstract class MockManager(
             return verifyPosition == globalInvokedParametersList.size
         }
 
-    fun debugPrint(){
+    fun debugPrint() {
         println("verifyPosition: $verifyPosition")
         globalInvokedParametersList.forEach {
             println("interaction: $it")
         }
     }
 
-    inner class MockRecorder<T, RT>() {
+    open inner class MockData<T, RT>() {
+        internal var stubbedError: Throwable? = null
+    }
 
-        val emptyList = emptyList<Any?>().freeze()
+    interface MockField<RT> {
+        fun calledWith(vararg args: Any?): Boolean
+        val calledCount: Int
+        fun throwOnCall(t: Throwable)
+        fun returns(rt: RT, matchers: List<Matcher> = emptyList(), times: Int = Int.MAX_VALUE)
+        fun invokeCount(args: List<Any?>)
+    }
 
-        private var invokedCount = 0
-        private val interactionList = mutableListOf<MethodCall>()
-        private var stubbedError: Throwable? = null
+    inner class MockFieldRecorder<T, RT>() : MockData<T, RT>(), MockField<RT> {
         private var stubbedResult = mutableListOf<CannedResult<RT>>()
 
-        fun calledWith(args: List<Any?>): Boolean = nextInteraction() == MethodCall(this, args)
+        override fun calledWith(vararg args: Any?): Boolean = nextInteraction() == MethodCall(this, args.asList())
 
-        val called: Boolean
-            get() = invokedCount > 0
+        override val calledCount: Int
+            get() = globalInvokedParametersList.filterIsInstance<MethodCall>()
+                .count { it.source === this }
 
-        val calledCount: Int
-            get() = invokedCount
-
-        fun throwOnCall(t: Throwable) {
+        override fun throwOnCall(t: Throwable) {
             stubbedError = t
         }
 
-        fun returns(rt: RT, times: Int = 1): MockRecorder<T, RT> {
-            stubbedResult.add(CannedResult(rt, times))
-            return this
+        override fun returns(rt: RT, matchers: List<Matcher>, times: Int) {
+            stubbedResult.add(CannedResult(rt, times, matchers))
         }
 
-        fun invokeCount(args: List<Any?>) {
-            invokedCount++
-
-            if (recordCalls) {
-                val element = MethodCall(this, ArrayList(args))
-                interactionList.add(element)
-                globalInvokedParametersList.add(element)
-            }
+        override fun invokeCount(args: List<Any?>) {
+            val element = MethodCall(this, ArrayList(args))
+            globalInvokedParametersList.add(element)
 
             if (stubbedError != null)
                 throw stubbedError!!
@@ -84,12 +110,23 @@ abstract class MockManager(
         }
 
         fun invoke(dblock: T.() -> RT, args: List<Any?>): RT {
-            val result = if (stubbedResult.isNotEmpty()) {
-                stubbedResult.removeAt(0).r
-            } else if (delegate != null) {
-                (delegate as T).dblock()
-            } else {
-                throw NullPointerException()
+            val stubbedMatch = stubbedResult.firstOrNull {
+                it.matchers.isEmpty() ||
+                        (it.matchers.size == args.size &&
+                                it.matchers.mapIndexed { index, matcher ->
+                                    matcher.match(args[index])
+                                }.all { it }
+                                )
+            }
+            val result = when {
+                stubbedMatch != null -> {
+                    stubbedMatch.times--
+                    if (stubbedMatch.times == 0)
+                        stubbedResult.remove(stubbedMatch)
+                    stubbedMatch.r
+                }
+                delegate != null -> (delegate as T).dblock()
+                else -> throw NullPointerException()
             }
 
             invokeCount(args)
@@ -99,34 +136,38 @@ abstract class MockManager(
         fun invoke(dblock: T.() -> RT): RT = invoke(dblock, emptyList)
     }
 
-    inner class MockProperty<T, RT>(private val dget: T.() -> RT, private val dset: T.(RT) -> Unit) {
-        val emptyList = emptyList<RT>().freeze()
+    interface MockProperty<RT> {
+        val getCalled: Boolean
+        fun setCalled(rt: RT): Boolean
+        val calledCountGet: Int
+        val calledCountSet: Int
+        fun throwOnCall(t: Throwable)
+        fun returnOnCall(rt: RT)
+    }
 
-        private var invokedCountGet = 0
-        private var invokedCountSet = 0
-        private val interactionList = mutableListOf<Interaction>()
-        private var stubbedError: Throwable? = null
+    inner class MockPropertyRecorder<T, RT>(private val dget: T.() -> RT, private val dset: T.(RT) -> Unit) :
+        MockData<T, RT>(), MockProperty<RT> {
+
         private var stubbedResult: RT? = null
 
-        val getCalled: Boolean
+        override val getCalled: Boolean
             get() = nextInteraction() == ValGet(this)
 
-        fun setCalled(rt: RT): Boolean = nextInteraction() == ValSet(this, rt)
+        override fun setCalled(rt: RT): Boolean = nextInteraction() == ValSet(this, rt)
 
-        val called: Boolean
-            get() = invokedCountGet > 0 || invokedCountSet > 0
+        override val calledCountGet: Int
+            get() = globalInvokedParametersList.filterIsInstance<ValGet>()
+                .count { it.source === this }
 
-        val calledCountGet: Int
-            get() = invokedCountGet
+        override val calledCountSet: Int
+            get() = globalInvokedParametersList.filterIsInstance<ValSet<*>>()
+                .count { it.source === this }
 
-        val calledCountSet: Int
-            get() = invokedCountSet
-
-        fun throwOnCall(t: Throwable) {
+        override fun throwOnCall(t: Throwable) {
             stubbedError = t
         }
 
-        fun returnOnCall(rt: RT) {
+        override fun returnOnCall(rt: RT) {
             stubbedResult = rt
         }
 
@@ -140,9 +181,7 @@ abstract class MockManager(
                 }
 
             } finally {
-                invokedCountGet++
                 val interaction = ValGet(this)
-                interactionList.add(interaction)
                 globalInvokedParametersList.add(interaction)
             }
 
@@ -156,13 +195,8 @@ abstract class MockManager(
                 stubbedResult = value
             }
 
-            if (recordCalls) {
-                val interaction = ValSet(this, value)
-                interactionList.add(interaction)
-                globalInvokedParametersList.add(interaction)
-            }
-
-            invokedCountSet++
+            val interaction = ValSet(this, value)
+            globalInvokedParametersList.add(interaction)
         }
     }
 }

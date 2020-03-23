@@ -33,13 +33,25 @@ class MockNameMap(
         //fun elements with the same name as other elements
         selectedElements.filter { it.descriptor is FunctionDescriptor }.forEach { key ->
             val baseName = makeMockerName(key.descriptor)
-            if (nameMap.get(baseName)!!.size > 1) {
-                val sb = StringBuilder("${baseName}_fun")
-                while (values.contains(sb.toString()) || findPropWithName(mockClass, sb.toString()) != null) {
-                    sb.append("_")
+            val elementList = nameMap.get(baseName)!!
+            if (elementList.size > 1) {
+                val multiple = elementList.filter { it.descriptor is FunctionDescriptor }.size > 1
+                val theName = if(multiple){
+                    var nameCount = 0
+                    var maybeName = ""
+                    do {
+                        maybeName = "${baseName}_fun${nameCount++}"
+                    }while (values.contains(maybeName) || findPropWithName(mockClass, maybeName) != null)
+                    maybeName
+                }else{
+                    val sb = StringBuilder("${baseName}_fun")
+                    while (values.contains(sb.toString()) || findPropWithName(mockClass, sb.toString()) != null) {
+                        sb.append("_")
+                    }
+                    sb.toString()
                 }
 
-                put(key, sb.toString())
+                put(key, theName)
             }
         }
     }
