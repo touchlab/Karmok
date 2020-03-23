@@ -40,6 +40,13 @@
             <className>co.touchlab.karmok.MockMembersHandler</className>
             <category>kotlin</category>
         </intentionAction>
+        <localInspection language="kotlin"
+                         displayName="Kapture Inspection"
+                         groupName="Example inspections"
+                         groupPath="SDK"
+                         enabledByDefault="true"
+                         level="WARNING"
+                         implementationClass="co.touchlab.kapture.KaptureCodeInspection"/>
     </extensions>
 
     <!--<actions>

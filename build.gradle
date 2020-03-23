@@ -1,6 +1,4 @@
 buildscript {
-  apply from: "$rootDir/gradle/dependencies.gradle"
-
   repositories {
     mavenCentral()
     google()
@@ -9,8 +7,17 @@ buildscript {
   }
 
   dependencies {
-    classpath deps.plugins.kotlin
-    classpath deps.plugins.intellij
-    classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:${versions.kotlin}"
+    classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$KOTLIN_VERSION"
+    classpath "gradle.plugin.org.jetbrains.intellij.plugins:gradle-intellij-plugin:0.4.15"
+  }
+}
+
+allprojects {
+  repositories {
+    mavenLocal()
+    mavenCentral()
+    google()
+    jcenter()
+//        maven { url 'https://dl.bintray.com/kotlin/kotlin-eap' }
   }
 }

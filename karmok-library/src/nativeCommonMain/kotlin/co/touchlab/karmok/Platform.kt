@@ -37,4 +37,4 @@ actual class AtomicInt actual constructor(initialValue:Int){
     actual fun compareAndSet(expected: Int, new: Int): Boolean = atom.compareAndSet(expected, new)
 }
 
-actual fun <T> T.freeze(): T = this.freeze()
+internal actual fun <T> T.freeze(): T = this.freeze()
