@@ -108,7 +108,7 @@ abstract class OverrideImplementMembersHandler : LanguageCodeInsightActionHandle
         if(innerMockClass != null)
             return innerMockClass
         val factory = KtPsiFactory(classOrObject.project)
-        val cl = factory.createClass("inner class InnerMock(delegate:Any? = null, recordCalls:Boolean = true) : MockManager(delegate, recordCalls) {}")
+        val cl = factory.createClass("inner class InnerMock(delegate:Any? = null) : MockManager(delegate) {}")
 
         return insertMembersAfter(editor, classOrObject, listOf(cl)).get(0)
     }

@@ -126,10 +126,10 @@ fun OverrideMemberChooserObject.generateMocker(
     val targetTypestring = typeBuilder.toString()
 
     val propertyDefinition: String = when (descriptor) {
-        is FunctionDescriptor -> "internal val ${nameMap.getName(this)}: MockField = MockFieldRecorder<$targetTypestring, ${descriptor.returnType.toString()}>()"
+        is FunctionDescriptor -> "internal val ${nameMap.getName(this)} = MockFunctionRecorder<$targetTypestring, ${descriptor.returnType.toString()}>()"
         is PropertyDescriptor -> {
             val propSetter = if((descriptor as PropertyDescriptor).isVar){"${descriptor.name} = it"}else{""}
-            "internal val ${nameMap.getName(this)}: MockProperty = MockPropertyRecorder<$targetTypestring, ${descriptor.returnType.toString()}>({${descriptor.name}}) {$propSetter}"
+            "internal val ${nameMap.getName(this)} = MockPropertyRecorder<$targetTypestring, ${descriptor.returnType.toString()}>({${descriptor.name}}) {$propSetter}"
         }
         else -> error("Unknown member to override: $descriptor")
     }
