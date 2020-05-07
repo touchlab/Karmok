@@ -3,7 +3,7 @@ package co.touchlab.karmok
 import kotlin.reflect.KProperty
 
 sealed class Interaction
-data class MethodCall(val source: MockManager.MockFieldRecorder<*, *>, val data: List<Any?>) : Interaction()
+data class MethodCall(val source: MockManager.MockFunctionRecorder<*, *>, val data: List<Any?>) : Interaction()
 data class ValGet(val source: MockManager.MockPropertyRecorder<*, *>) : Interaction()
 data class ValSet<RT>(val source: MockManager.MockPropertyRecorder<*, *>, val data: RT) : Interaction()
 
@@ -69,22 +69,18 @@ abstract class MockManager(
         internal var stubbedError: Throwable? = null
     }
 
-    interface MockField<RT> {
-        fun calledWith(vararg args: Any?): Boolean
-        val calledCount: Int
+    interface MockFunctionConfigure<RT> {
         fun throwOnCall(t: Throwable)
         fun returns(rt: RT, matchers: List<Matcher> = emptyList(), times: Int = Int.MAX_VALUE)
-        fun invokeCount(args: List<Any?>)
     }
 
-    inner class MockFieldRecorder<T, RT>() : MockData<T, RT>(), MockField<RT> {
+    interface MockFunctionVerify {
+        fun calledWith(vararg args: Any?): Boolean
+        val calledCount: Int
+    }
+
+    inner class MockFunctionRecorder<T, RT>() : MockData<T, RT>(), MockFunctionConfigure<RT>, MockFunctionVerify {
         private var stubbedResult = mutableListOf<CannedResult<RT>>()
-
-        override fun calledWith(vararg args: Any?): Boolean = nextInteraction() == MethodCall(this, args.asList())
-
-        override val calledCount: Int
-            get() = globalInvokedParametersList.filterIsInstance<MethodCall>()
-                .count { it.source === this }
 
         override fun throwOnCall(t: Throwable) {
             stubbedError = t
@@ -94,7 +90,13 @@ abstract class MockManager(
             stubbedResult.add(CannedResult(rt, times, matchers))
         }
 
-        override fun invokeCount(args: List<Any?>) {
+        override fun calledWith(vararg args: Any?): Boolean = nextInteraction() == MethodCall(this, args.asList())
+
+        override val calledCount: Int
+            get() = globalInvokedParametersList.filterIsInstance<MethodCall>()
+                .count { it.source === this }
+
+        private fun invokeCount(args: List<Any?>) {
             val element = MethodCall(this, ArrayList(args))
             globalInvokedParametersList.add(element)
 
@@ -136,17 +138,20 @@ abstract class MockManager(
         fun invoke(dblock: T.() -> RT): RT = invoke(dblock, emptyList)
     }
 
-    interface MockProperty<RT> {
-        val getCalled: Boolean
-        fun setCalled(rt: RT): Boolean
-        val calledCountGet: Int
-        val calledCountSet: Int
+    interface MockPropertyConfigure<RT> {
         fun throwOnCall(t: Throwable)
         fun returnOnCall(rt: RT)
     }
 
+    interface MockPropertyVerify<RT> {
+        val getCalled: Boolean
+        fun setCalled(rt: RT): Boolean
+        val calledCountGet: Int
+        val calledCountSet: Int
+    }
+
     inner class MockPropertyRecorder<T, RT>(private val dget: T.() -> RT, private val dset: T.(RT) -> Unit) :
-        MockData<T, RT>(), MockProperty<RT> {
+        MockData<T, RT>(), MockPropertyConfigure<RT>, MockPropertyVerify<RT> {
 
         private var stubbedResult: RT? = null
 

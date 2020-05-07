@@ -126,15 +126,63 @@ fun OverrideMemberChooserObject.generateMocker(
     val targetTypestring = typeBuilder.toString()
 
     val propertyDefinition: String = when (descriptor) {
-        is FunctionDescriptor -> "internal val ${nameMap.getName(this)}: MockField = MockFieldRecorder<$targetTypestring, ${descriptor.returnType.toString()}>()"
+        is FunctionDescriptor -> "internal val ${nameMap.getName(this)} = MockFunctionRecorder<$targetTypestring, ${descriptor.returnType.toString()}>()"
         is PropertyDescriptor -> {
             val propSetter = if((descriptor as PropertyDescriptor).isVar){"${descriptor.name} = it"}else{""}
-            "internal val ${nameMap.getName(this)}: MockProperty = MockPropertyRecorder<$targetTypestring, ${descriptor.returnType.toString()}>({${descriptor.name}}) {$propSetter}"
+            "internal val ${nameMap.getName(this)} = MockPropertyRecorder<$targetTypestring, ${descriptor.returnType.toString()}>({${descriptor.name}}) {$propSetter}"
         }
         else -> error("Unknown member to override: $descriptor")
     }
     return factory.createProperty(propertyDefinition)
 }
+
+/*
+fun OverrideMemberChooserObject.generateMocker(
+    targetClass: KtClassOrObject,
+    nameMap: MockNameMap
+) : MockPropertyDefinitions {
+    val factory = KtPsiFactory(targetClass.project)
+    val typeBuilder = StringBuilder(targetClass.fqName?.asString())
+    val typeParameters = targetClass.typeParameters
+    if(typeParameters.isNotEmpty()){
+        typeBuilder.append("<${typeParameters.joinToString { it.name!! }}>")
+    }
+    val targetTypestring = typeBuilder.toString()
+
+    val propertyDefinition: String = when (descriptor) {
+        is FunctionDescriptor -> "internal val _${nameMap.getName(this)} = MockFunctionRecorder<$targetTypestring, ${descriptor.returnType.toString()}>()"
+        is PropertyDescriptor -> {
+            val propSetter = if((descriptor as PropertyDescriptor).isVar){"${descriptor.name} = it"}else{""}
+            "internal val ${nameMap.getName(this)} = MockPropertyRecorder<$targetTypestring, ${descriptor.returnType.toString()}>({${descriptor.name}}) {$propSetter}"
+        }
+        else -> error("Unknown member to override: $descriptor")
+    }
+
+    val configDefinition: String = when (descriptor) {
+        is FunctionDescriptor -> "internal val ${nameMap.getName(this)} : MockFunctionConfigure<${descriptor.returnType.toString()}> get() = _${nameMap.getName(this)}"
+        is PropertyDescriptor -> "internal val ${nameMap.getName(this)} : MockPropertyConfigure<${descriptor.returnType.toString()}> get() = _${nameMap.getName(this)}"
+        else -> error("Unknown member to override: $descriptor")
+    }
+
+    val verifyDefinition: String = when (descriptor) {
+        is FunctionDescriptor -> "internal val ${nameMap.getName(this)} : MockFunctionVerify<${descriptor.returnType.toString()}> get() = _${nameMap.getName(this)}"
+        is PropertyDescriptor -> "internal val ${nameMap.getName(this)} : MockPropertyVerify<${descriptor.returnType.toString()}> get() = _${nameMap.getName(this)}"
+        else -> error("Unknown member to override: $descriptor")
+    }
+
+    return MockPropertyDefinitions(
+        factory.createProperty(propertyDefinition),
+        factory.createProperty(configDefinition),
+        factory.createProperty(verifyDefinition)
+    )
+}
+
+data class MockPropertyDefinitions(
+    val main: KtDeclaration,
+    val config: KtDeclaration,
+    val verify: KtDeclaration
+)
+ */
 
 fun OverrideMemberChooserObject.generateMember(
     targetClass: KtClassOrObject?,
