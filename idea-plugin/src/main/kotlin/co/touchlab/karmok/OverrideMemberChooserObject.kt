@@ -275,7 +275,7 @@ private val OVERRIDE_RENDERER = DescriptorRenderer.withOptions {
     typeNormalizer = IdeDescriptorRenderers.APPROXIMATE_FLEXIBLE_TYPES
     renderUnabbreviatedType = false
     annotationFilter = {
-        it.type.constructor.declarationDescriptor?.annotations?.hasAnnotation(ExperimentalUsageChecker.EXPERIMENTAL_FQ_NAME)
+        it.type.constructor.declarationDescriptor?.annotations?.hasAnnotation(ExperimentalUsageChecker.OLD_EXPERIMENTAL_FQ_NAME)
             ?: false
     }
     presentableUnresolvedTypes = true
