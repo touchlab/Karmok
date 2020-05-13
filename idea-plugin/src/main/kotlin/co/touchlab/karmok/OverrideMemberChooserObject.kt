@@ -387,7 +387,9 @@ private fun generateFunction(
             sb.append(it.name.asString())
             sb.toString()
         }
-        val invokeName = if(returnsNotUnit){"invoke"}else{"invokeUnit"}
+        val invokeName = "invoke" + (if(!returnsNotUnit) "Unit" else "") +
+                if(descriptor.isSuspend) "Suspend" else ""
+
         val accessMethod = "${descriptor.name.asString()}($paramsString)"//if(returnsNotUnit){"${descriptor.name.asString()}($paramsString)"}else{""}
         val delegation = "mock.${name}.${invokeName}({$accessMethod}, listOf(${paramsString}))"
         val returnPrefix = if (returnsNotUnit) "return " else ""
