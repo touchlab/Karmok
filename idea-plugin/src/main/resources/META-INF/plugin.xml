@@ -19,7 +19,6 @@
     <name>Mock generator for Multiplatform Kotlin</name>
     <vendor email="info@touchlab.co" url="https://touchlab.co">Touchlab</vendor>
 
-    <depends>com.intellij.modules.idea</depends>
     <depends>com.intellij.modules.java</depends>
     <depends>com.intellij.modules.lang</depends>
     <depends>com.intellij.modules.platform</depends>
