@@ -1,5 +1,6 @@
 package co.touchlab.karmok
 
+import kotlin.coroutines.coroutineContext
 import kotlin.reflect.KProperty
 
 sealed class Interaction
@@ -111,22 +112,17 @@ abstract class MockManager(
             }
         }
 
-        fun invoke(dblock: T.() -> RT, args: List<Any?>): RT {
-            val stubbedMatch = stubbedResult.firstOrNull {
-                it.matchers.isEmpty() ||
-                        (it.matchers.size == args.size &&
-                                it.matchers.mapIndexed { index, matcher ->
-                                    matcher.match(args[index])
-                                }.all { it }
-                                )
+        suspend fun invokeUnitSuspend(dblock: suspend T.() -> Unit, args: List<Any?>) {
+            invokeCount(args)
+            if (delegate != null) {
+                (delegate as T).dblock()
             }
+        }
+
+        fun invoke(dblock: T.() -> RT, args: List<Any?>): RT {
+            val stubbedMatch = getStubbedMatch(args)
             val result = when {
-                stubbedMatch != null -> {
-                    stubbedMatch.times--
-                    if (stubbedMatch.times == 0)
-                        stubbedResult.remove(stubbedMatch)
-                    stubbedMatch.r
-                }
+                stubbedMatch != null -> handleStubbed(stubbedMatch)
                 delegate != null -> (delegate as T).dblock()
                 else -> throw NullPointerException()
             }
@@ -135,7 +131,39 @@ abstract class MockManager(
             return result
         }
 
+        suspend fun invokeSuspend(dblock: suspend T.() -> RT, args: List<Any?>): RT {
+            val stubbedMatch = getStubbedMatch(args)
+            val result = when {
+                stubbedMatch != null -> handleStubbed(stubbedMatch)
+                delegate != null -> (delegate as T).dblock()
+                else -> throw NullPointerException()
+            }
+
+            invokeCount(args)
+            return result
+        }
+
+        private fun handleStubbed(stubbedMatch: CannedResult<RT>): RT {
+            stubbedMatch.times--
+            if (stubbedMatch.times == 0)
+                stubbedResult.remove(stubbedMatch)
+            return stubbedMatch.r
+        }
+
+        private fun getStubbedMatch(args: List<Any?>): CannedResult<RT>? {
+            val stubbedMatch = stubbedResult.firstOrNull {
+                it.matchers.isEmpty() ||
+                        (it.matchers.size == args.size &&
+                                it.matchers.mapIndexed { index, matcher ->
+                                    matcher.match(args[index])
+                                }.all { it }
+                                )
+            }
+            return stubbedMatch
+        }
+
         fun invoke(dblock: T.() -> RT): RT = invoke(dblock, emptyList)
+        suspend fun invokeSuspend(dblock: suspend T.() -> RT): RT = invokeSuspend(dblock, emptyList)
     }
 
     interface MockPropertyConfigure<RT> {
