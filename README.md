@@ -57,9 +57,9 @@ The implementation includes an inner class called `InnerMock`, which extends `Mo
 
 ```kotlin
 @Test
-fun arst(){
-    val tt = TestingImpl()
-    tt.mock.arst.returnOnCall("arst")
+fun helloTest(){
+    val tt = MockMyInterface()
+    tt.mock.name.returnOnCall("touchlab")
     tt.mock.hey.returns(22L)
     
     assertEquals(tt.hey(), 22L)
@@ -86,10 +86,10 @@ These are separate because the next goal was to improve the config and verify st
 
 ```kotlin
 @Test
-fun arst(){
-    val tt = TestingImpl()
+fun helloTest(){
+    val tt = MockMyInterface()
     tt.mock.config {
-        arst.returnOnCall("arst")
+        name.returnOnCall("touchlab")
         hey.returns(22L)
     }
     
