@@ -103,4 +103,4 @@ fun helloTest(){
 
 Not implemented, but that's why there are multiple interfaces. Currently, the config and verify functions can feel a little confusing because they both show up on autocomplete, but you'll probably get used to it.
 ## Issues
-Currently the plugin does not add the imports for the inserted plumbing code. This is technically not too difficult (I have example code from Kapture), but it's also not super critical. To add later.
+Currently the plugin does not add the imports for the inserted plumbing code. This is technically not too difficult, but it's also not super critical. To add later.
