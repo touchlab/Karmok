@@ -6,7 +6,6 @@ Karmok allows you to generate a mock implementation of an interface which is cap
 ### Pre-alpha
 
 Karmock is a library used by Touchlab as an experimental tool. It's meant as an internal tool, as well as an experiment to find out what could go into a full fledged Kotlin Multiplatform mocking solution. We are simply making it public to show how a kmp mocking solution could work.
-This code is still in an experimental state, and it is not a complete project. You may not want to use this library as a full fledged mocking solution, as it was never expected to be used publicly. 
 If you decide to use Karmock, know that Touchlab is not providing any technical support for this library.
 
 ### Limitations
@@ -15,8 +14,8 @@ Currently Karmock has a few limitations which should be mentioned here:
 
 * There is no concept of spies in Karmok.
 * The library only supports Interfaces
-* The IDE plugin is not in the marketplace, so you have to build it yourself
-* A large amount of boilerplate code is required to create a mock
+* The IDE plugin is not in the marketplace, so you get it from the release section or build it yourself
+* Boilerplate is added to your code by the plugin when creating a mock
 
 There is no guarantee that these limitations will change, as mentioned earlier this is an pre-alpha experimental tool
 
