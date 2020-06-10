@@ -3,7 +3,7 @@ apply plugin: 'org.jetbrains.intellij'
 apply plugin: 'org.jetbrains.kotlin.jvm'
 
 group 'co.touchlab'
-version '1.0.1-SNAPSHOT'
+version '0.1.7'
 
 sourceCompatibility = 1.8
 
